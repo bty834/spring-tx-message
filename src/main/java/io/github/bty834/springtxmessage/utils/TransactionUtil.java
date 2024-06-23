@@ -22,6 +22,7 @@ public class TransactionUtil {
             };
             // 注册Synchronization
             TransactionSynchronizationManager.registerSynchronization(transactionSynchronization);
+            return;
         }
         // 无事务直接执行
         runnable.run();

@@ -15,17 +15,16 @@ import org.springframework.core.env.PropertyResolver;
 
 
 @Configuration
-@ConditionalOnBean({TxMessageSendAdapter.class, TxMessageRepository.class})
 public class TxMessageConfiguration {
 
     @Bean
-    @ConditionalOnProperty(value = TxMessageSender.ENABLED_KEY, havingValue = "true")
+    @ConditionalOnBean({TxMessageSendAdapter.class, TxMessageRepository.class})
     public TxMessageSender txMessageSender(TxMessageSendAdapter adapter, TxMessageRepository txMessageRepository, PropertyResolver propertyResolver) {
         return new DefaultTxMessageSender(adapter, txMessageRepository, propertyResolver);
     }
 
     @Bean
-    @ConditionalOnProperty(value = TxMessageCompensateSender.COMPENSATE_ENABLED_KEY, havingValue = "true")
+    @ConditionalOnBean({TxMessageSendAdapter.class, TxMessageRepository.class})
     public TxMessageCompensateSender txMessageCompensateSender(TxMessageSendAdapter txMessageSendAdapter, TxMessageRepository txMessageRepository, PropertyResolver propertyResolver) {
         return new DefaultTxMessageCompensateSender(txMessageSendAdapter, txMessageRepository, propertyResolver);
     }

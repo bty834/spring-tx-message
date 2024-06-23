@@ -1,8 +1,8 @@
-CREATE TABLE `local_table`
+CREATE TABLE `your_table_name`
 (
-    `id`              bigint       NOT NULL,
+    `id`              bigint       NOT NULL AUTO_INCREMENT,
     `topic`           varchar(255) NOT NULL,
-    `key`             varchar(255)          DEFAULT NULL,
+    `sharding_key`    varchar(255)          DEFAULT NULL,
     `msg_id`          varchar(255)          DEFAULT NULL,
     `send_status`     tinyint      NOT NULL DEFAULT '0',
     `content`         longtext     NOT NULL,
@@ -14,6 +14,6 @@ CREATE TABLE `local_table`
     PRIMARY KEY (`id`),
     KEY `idx_createtime` (`create_time`),
     KEY `idx_msgid` (`msg_id`),
-    KEY `idx_nextretrytime_sendstatus_deleted` (`next_retry_time`, `send_status`, `deleted`),
-    KEY `idx_updatetime` (`update_time`)
+    KEY `idx_updatetime` (`update_time`),
+    KEY `idx_nextretrytime_retrytimes_sendstatus_deleted` (`send_status`,`next_retry_time`, `retry_times`, `deleted`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4

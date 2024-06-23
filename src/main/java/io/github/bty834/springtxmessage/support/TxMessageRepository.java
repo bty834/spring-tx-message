@@ -1,19 +1,26 @@
 package io.github.bty834.springtxmessage.support;
 
 import io.github.bty834.springtxmessage.model.SendStatus;
-import io.github.bty834.springtxmessage.model.TxMessage;
-import java.sql.Date;
+import io.github.bty834.springtxmessage.model.TxMessagePO;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Objects;
 import javax.sql.DataSource;
 import lombok.Setter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 
 public class TxMessageRepository {
 
@@ -28,7 +35,7 @@ public class TxMessageRepository {
 
     private Integer insertBatchSize = 1000;
 
-    private static final RowMapper<TxMessage> ROW_MAPPER = new TxMessageRowMapper();
+    private static final RowMapper<TxMessagePO> ROW_MAPPER = new TxMessageRowMapper();
 
     public TxMessageRepository(DataSource dataSource, String tableName) {
         this.dataSource = dataSource;
@@ -36,61 +43,67 @@ public class TxMessageRepository {
         jdbcTemplate = new JdbcTemplate(dataSource);
     }
 
-    public TxMessage queryById(Long id) {
+    public TxMessagePO queryById(Long id) {
         String sql = "select * from " + tableName + " where id = ?";
         return jdbcTemplate.queryForObject(sql, ROW_MAPPER, id);
     }
 
-    public TxMessage queryByMsgId(String msgId) {
+    public TxMessagePO queryByMsgId(String msgId) {
         String sql = "select * from " + tableName + " where msg_id = ?";
         return jdbcTemplate.queryForObject(sql, ROW_MAPPER, msgId);
     }
 
-    public List<TxMessage> queryReadyToSendMessages(int maxRetryTimes, int delaySeconds) {
-        LocalDate nextRetryTimeLte = LocalDate.now().minus(Duration.of(delaySeconds, ChronoUnit.SECONDS));
-        String sql = "select * from " + tableName + " where send_status in (?,?) and next_retry_time <= and deleted = 0 ? limit ?";
-        return jdbcTemplate.query(sql, ROW_MAPPER, SendStatus.INIT, SendStatus.FAILED, nextRetryTimeLte, limit);
+    public List<TxMessagePO> queryReadyToSendMessages(int maxRetryTimes, int delaySeconds) {
+        LocalDateTime nextRetryTimeLte = LocalDateTime.now().minusSeconds(delaySeconds);
+        String sql = "select * from " + tableName + " where send_status in (?,?) and next_retry_time <= ? and retry_times <= ? and deleted = 0 limit ?";
+        return jdbcTemplate.query(sql, ROW_MAPPER, SendStatus.INIT.getCode(), SendStatus.FAILED.getCode(), nextRetryTimeLte, maxRetryTimes, limit);
     }
 
     // save并回填id
-    public void batchSave(List<TxMessage> messages) {
-        jdbcTemplate.batchUpdate(" insert into " + tableName + " (topic, key, send_status, content, nextRetryTime)" +
-                                     " values (?, ?, ?, ?, ?)",
-            messages,
-            insertBatchSize,
-            (PreparedStatement ps, TxMessage msg) -> {
-                ps.setString(1, msg.getTopic());
-                ps.setString(2, msg.getKey());
-                ps.setInt(3, msg.getSendStatus().getCode());
-                ps.setString(4, msg.getContent());
-                ps.setDate(5, Date.valueOf(msg.getNextRetryTime()));
-            });
+    public void batchSave(List<TxMessagePO> messages) {
+        String sql = " insert into " + tableName + " (topic, sharding_key, send_status, content, next_retry_time) value (?, ?, ?, ?, ?)";
+
+        for (TxMessagePO message : messages) {
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                // 指定主键
+                PreparedStatement preparedStatement = connection.prepareStatement(sql, new String[]{"id"});
+                preparedStatement.setString(1, message.getTopic());
+                preparedStatement.setString(2, message.getShardingKey());
+                preparedStatement.setInt(3, message.getSendStatus().getCode());
+                preparedStatement.setString(4, message.getContent());
+                preparedStatement.setTimestamp(5, Timestamp.valueOf(message.getNextRetryTime()));
+                return preparedStatement;
+            }, keyHolder);
+            message.setId(Objects.requireNonNull(keyHolder.getKey()).longValue());
+        }
     }
 
-    public void updateToSuccess(TxMessage message) {
-        jdbcTemplate.update("update " + tableName + " set send_status = ?, msg_id = ? where topic =?  and status = ? and is_deleted = 0", SendStatus.SUCCESS.getCode(),message.getMsgId(), message.getTopic(), message.getSendStatus());
+    public void updateById(TxMessagePO msg) {
+        String sql = "update " + tableName + " set send_status = ?, msg_id = ? where id = ? and deleted = 0";
+        jdbcTemplate.update(sql, msg.getSendStatus().getCode(), msg.getMsgId(), msg.getId());
     }
 
-    public void updateToFailed(TxMessage message) {
+    public void updateById2(TxMessagePO message) {
         jdbcTemplate.update("update " + tableName + " set send_status = ?, retry_times = ? , next_retry_time = ?"
-                                + " where topic =?  and send_status = ? and is_deleted = 0",
-            SendStatus.FAILED.getCode(),message.getRetryTimes(), message.getNextRetryTime(), message.getTopic(), message.getSendStatus());
+                                + " where id = ? and deleted = 0",
+            message.getSendStatus().getCode(), message.getRetryTimes(), message.getNextRetryTime(), message.getId());
     }
 
-    private static class TxMessageRowMapper implements RowMapper<TxMessage> {
+    private static class TxMessageRowMapper implements RowMapper<TxMessagePO> {
         @Override
-        public TxMessage mapRow(ResultSet rs, int rowNum) throws SQLException {
-            TxMessage txMessage = new TxMessage();
+        public TxMessagePO mapRow(ResultSet rs, int rowNum) throws SQLException {
+            TxMessagePO txMessage = new TxMessagePO();
             txMessage.setContent(rs.getString("content"));
-            txMessage.setNextRetryTime(rs.getDate("next_retry_time").toLocalDate());
+            txMessage.setNextRetryTime(rs.getTimestamp("next_retry_time").toLocalDateTime());
             txMessage.setRetryTimes(rs.getInt("retry_times"));
             txMessage.setId(rs.getLong("id"));
             txMessage.setSendStatus(SendStatus.fromCode(rs.getInt("send_status")));
-            txMessage.setUpdateTime(rs.getDate("update_time").toLocalDate());
-            txMessage.setCreateTime(rs.getDate("create_time").toLocalDate());
+            txMessage.setUpdateTime(rs.getTimestamp("update_time").toLocalDateTime());
+            txMessage.setCreateTime(rs.getTimestamp("create_time").toLocalDateTime());
             txMessage.setMsgId(rs.getString("msg_id"));
             txMessage.setTopic(rs.getString("topic"));
-            txMessage.setKey(rs.getString("key"));
+            txMessage.setShardingKey(rs.getString("sharding_key"));
             txMessage.setDeleted(rs.getBoolean("deleted"));
             return txMessage;
         }

@@ -3,13 +3,12 @@ package io.github.bty834.springtxmessage.support;
 import io.github.bty834.springtxmessage.TxMessageCompensateSender;
 import io.github.bty834.springtxmessage.TxMessageSendAdapter;
 import io.github.bty834.springtxmessage.model.SendStatus;
-import io.github.bty834.springtxmessage.model.TxMessage;
+import io.github.bty834.springtxmessage.model.TxMessagePO;
 import io.github.bty834.springtxmessage.model.TxMessageSendResult;
-import java.time.Duration;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.PropertyResolver;
@@ -30,7 +29,15 @@ public class DefaultTxMessageCompensateSender implements TxMessageCompensateSend
             return;
         }
         Integer delaySeconds = propertyResolver.getProperty(COMPENSATE_INTERVAL_SECONDS, Integer.class, 6);
-        List<TxMessage> txMessages = txMessageRepository.queryReadyToSendMessages(maxRetryTimes, delaySeconds);
+        List<TxMessagePO> txMessages = txMessageRepository.queryReadyToSendMessages(maxRetryTimes, delaySeconds);
+        List<Long> ids = txMessages.stream()
+                                 .filter(msg -> msg.getRetryTimes() >= maxRetryTimes)
+                                 .map(TxMessagePO::getId)
+                                 .collect(Collectors.toList());
+        if (!ids.isEmpty()) {
+            log.error("reaches max retry times {}, ids: {}", maxRetryTimes, ids);
+        }
+        txMessages.removeIf(msg -> msg.getRetryTimes() >= maxRetryTimes);
         doSend(txMessages);
     }
 
@@ -38,7 +45,7 @@ public class DefaultTxMessageCompensateSender implements TxMessageCompensateSend
         if (!propertyResolver.getProperty(COMPENSATE_ENABLED_KEY, Boolean.class, Boolean.FALSE)) {
             return;
         }
-        TxMessage txMessage = txMessageRepository.queryById(id);
+        TxMessagePO txMessage = txMessageRepository.queryById(id);
         doSend(Collections.singletonList(txMessage));
     }
 
@@ -46,29 +53,29 @@ public class DefaultTxMessageCompensateSender implements TxMessageCompensateSend
         if (!propertyResolver.getProperty(COMPENSATE_ENABLED_KEY, Boolean.class, Boolean.FALSE)) {
             return;
         }
-        TxMessage txMessage = txMessageRepository.queryByMsgId(msgId);
+        TxMessagePO txMessage = txMessageRepository.queryByMsgId(msgId);
         doSend(Collections.singletonList(txMessage));
     }
 
-    private void doSend(List<TxMessage> txMessages){
+    private void doSend(List<TxMessagePO> txMessages){
         txMessages.forEach(msg -> {
             try {
-                TxMessageSendResult sendResult = txMessageSendAdapter.send(msg);
+                TxMessageSendResult sendResult = txMessageSendAdapter.send(msg.convertToTxMessage());
                 if (!sendResult.isSuccess()) {
                     throw new RuntimeException("Tx message compensate send failed: " + msg);
                 }
                 assert sendResult.getMsgId() != null;
                 msg.setMsgId(sendResult.getMsgId());
-                txMessageRepository.updateToSuccess(msg);
                 msg.setSendStatus(SendStatus.SUCCESS);
+                txMessageRepository.updateById(msg);
             } catch (Exception e) {
                 log.error("compensate tx message failed :{}", msg, e);
                 Integer interval = propertyResolver.getProperty(COMPENSATE_INTERVAL_SECONDS, Integer.class, 10);
-                LocalDate nextRetryTime = LocalDate.now().plus(Duration.of(interval, ChronoUnit.SECONDS));
+                LocalDateTime nextRetryTime = LocalDateTime.now().plusSeconds(interval);
                 msg.setNextRetryTime(nextRetryTime);
                 msg.setRetryTimes(msg.getRetryTimes() + 1);
-                txMessageRepository.updateToFailed(msg);
                 msg.setSendStatus(SendStatus.FAILED);
+                txMessageRepository.updateById2(msg);
             }
         });
     }

@@ -1,5 +1,4 @@
 
-
 # Quick Start
 
 1. add dependency
@@ -12,7 +11,29 @@
    </dependency>
 ```
 
-2. configure adapter and repository
+2. create table and configure adapter and repository
+
+```sql
+CREATE TABLE `your_table_name`
+(
+    `id`              bigint       NOT NULL AUTO_INCREMENT,
+    `topic`           varchar(255) NOT NULL,
+    `sharding_key`    varchar(255)          DEFAULT NULL,
+    `msg_id`          varchar(255)          DEFAULT NULL,
+    `send_status`     tinyint      NOT NULL DEFAULT '0',
+    `content`         longtext     NOT NULL,
+    `retry_times`     tinyint      NOT NULL DEFAULT '0',
+    `next_retry_time` datetime     NOT NULL,
+    `deleted`         tinyint      NOT NULL DEFAULT '0',
+    `create_time`     datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `update_time`     datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_createtime` (`create_time`),
+    KEY `idx_msgid` (`msg_id`),
+    KEY `idx_updatetime` (`update_time`),
+    KEY `idx_nextretrytime_retrytimes_sendstatus_deleted` (`send_status`,`next_retry_time`, `retry_times`, `deleted`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4
+```
 
 ```java
 @Configuration
@@ -23,7 +44,8 @@ public class TxMessageConfig {
     }
     @Bean
     public TxMessageRepository txMessageRepository(DataSource dataSource) {
-        return new TxMessageRepository(dataSource, "local_message");
+        // your_table_name is your table name 
+        return new TxMessageRepository(dataSource, "your_table_name");
     }
 }
 
@@ -31,7 +53,9 @@ public class TxMessageConfig {
  * your send adapter
  */
 class MyMessageSendAdapter implements TxMessageSendAdapter {
-
+    
+    // ...
+    
     @Override
     public TxMessageSendResult send(TxMessage txMessage) {
         // your adapter logic
@@ -69,7 +93,7 @@ set `spring.tx.message.compensate.send.enabled = true` to enable compensate send
     TxMessageCompensateSender compensateSender;
     
     public void compensateSend() {
-        // send with retry times = 4
+        // send with retry times = 4, when reaches max retry times , it will log.error and don't compensate send
         compensateSender.send(4);
         
         compensateSender.sendByIdIgnoreStatus(1L);
