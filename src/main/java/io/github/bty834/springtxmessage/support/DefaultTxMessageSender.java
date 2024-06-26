@@ -62,21 +62,23 @@ public class DefaultTxMessageSender implements TxMessageSender {
     @Override
     public void saveAndTrySend(TxMessage message) {
         assert message != null;
-        if (!propertyResolver.getProperty(ENABLED_KEY, Boolean.class, Boolean.FALSE)) {
+        if (propertyResolver.getProperty(ENABLED_KEY, Boolean.class, Boolean.FALSE)) {
+            List<TxMessagePO> txMessagePOS = doBatchSave(Collections.singletonList(message));
+            TransactionUtil.executeAfterCommit(()-> trySend(txMessagePOS), (e)->{});
             return;
         }
-        List<TxMessagePO> txMessagePOS = doBatchSave(Collections.singletonList(message));
-        TransactionUtil.executeAfterCommit(()-> trySend(txMessagePOS), (e)->{});
+        txMessageSendAdapter.send(message);
     }
 
     @Override
     public void batchSaveAndTrySend(List<TxMessage> messages) {
         assert messages != null;
-        if (!propertyResolver.getProperty(ENABLED_KEY, Boolean.class, Boolean.FALSE)) {
+        if (propertyResolver.getProperty(ENABLED_KEY, Boolean.class, Boolean.FALSE)) {
+            List<TxMessagePO> txMessagePOS = doBatchSave(messages);
+            TransactionUtil.executeAfterCommit(()-> trySend(txMessagePOS), (e)->{});
             return;
         }
-        List<TxMessagePO> txMessagePOS = doBatchSave(messages);
-        TransactionUtil.executeAfterCommit(()-> trySend(txMessagePOS), (e)->{});
+        messages.forEach(txMessageSendAdapter::send);
     }
 
     private void trySend(List<TxMessagePO> messages) {
