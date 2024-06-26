@@ -2,50 +2,40 @@ package io.github.bty834.springtxmessage.support;
 
 import io.github.bty834.springtxmessage.model.SendStatus;
 import io.github.bty834.springtxmessage.model.TxMessagePO;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.sql.Types;
-import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Objects;
 import javax.sql.DataSource;
 import lombok.Setter;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.core.ParameterizedPreparedStatementSetter;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 
 public class TxMessageRepository {
 
-    private final DataSource dataSource;
-
     private final String tableName;
 
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
 
     @Setter
     private Integer limit = 1000;
 
-    private Integer insertBatchSize = 1000;
+    @Setter
+    private Integer insertBatchSize = 500;
 
     private static final RowMapper<TxMessagePO> ROW_MAPPER = new TxMessageRowMapper();
 
     public TxMessageRepository(DataSource dataSource, String tableName) {
-        this.dataSource = dataSource;
         this.tableName = tableName;
         jdbcTemplate = new JdbcTemplate(dataSource);
     }
 
-    public TxMessagePO queryById(Long id) {
-        String sql = "select * from " + tableName + " where id = ?";
-        return jdbcTemplate.queryForObject(sql, ROW_MAPPER, id);
+    public TxMessagePO queryByNumber(Long number) {
+        String sql = "select * from " + tableName + " where number = ?";
+        return jdbcTemplate.queryForObject(sql, ROW_MAPPER, number);
     }
 
     public TxMessagePO queryByMsgId(String msgId) {
@@ -61,33 +51,33 @@ public class TxMessageRepository {
 
     // save并回填id
     public void batchSave(List<TxMessagePO> messages) {
-        String sql = " insert into " + tableName + " (topic, sharding_key, send_status, content, next_retry_time) value (?, ?, ?, ?, ?)";
-
-        for (TxMessagePO message : messages) {
-            KeyHolder keyHolder = new GeneratedKeyHolder();
-            jdbcTemplate.update(connection -> {
-                // 指定主键
-                PreparedStatement preparedStatement = connection.prepareStatement(sql, new String[]{"id"});
-                preparedStatement.setString(1, message.getTopic());
-                preparedStatement.setString(2, message.getShardingKey());
-                preparedStatement.setInt(3, message.getSendStatus().getCode());
-                preparedStatement.setString(4, message.getContent());
-                preparedStatement.setTimestamp(5, Timestamp.valueOf(message.getNextRetryTime()));
-                return preparedStatement;
-            }, keyHolder);
-            message.setId(Objects.requireNonNull(keyHolder.getKey()).longValue());
+        if (messages.isEmpty()) {
+            return;
         }
+        String sql = " insert into " + tableName + " (number, topic, sharding_key, send_status, content, next_retry_time) value (?, ?, ?, ?, ?, ?)";
+
+        jdbcTemplate.batchUpdate(sql, messages, insertBatchSize, new ParameterizedPreparedStatementSetter<TxMessagePO>() {
+            @Override
+            public void setValues(PreparedStatement ps, TxMessagePO message) throws SQLException {
+                ps.setLong(1, message.getNumber());
+                ps.setString(2, message.getTopic());
+                ps.setString(3, message.getShardingKey());
+                ps.setInt(4, message.getSendStatus().getCode());
+                ps.setString(5, message.getContent());
+                ps.setTimestamp(6, Timestamp.valueOf(message.getNextRetryTime()));
+            }
+        });
     }
 
-    public void updateById(TxMessagePO msg) {
-        String sql = "update " + tableName + " set send_status = ?, msg_id = ? where id = ? and deleted = 0";
-        jdbcTemplate.update(sql, msg.getSendStatus().getCode(), msg.getMsgId(), msg.getId());
+    public void updateByNumber(TxMessagePO msg) {
+        String sql = "update " + tableName + " set send_status = ?, msg_id = ? where number = ? and deleted = 0";
+        jdbcTemplate.update(sql, msg.getSendStatus().getCode(), msg.getMsgId(), msg.getNumber());
     }
 
-    public void updateById2(TxMessagePO message) {
+    public void updateByNumber2(TxMessagePO message) {
         jdbcTemplate.update("update " + tableName + " set send_status = ?, retry_times = ? , next_retry_time = ?"
-                                + " where id = ? and deleted = 0",
-            message.getSendStatus().getCode(), message.getRetryTimes(), message.getNextRetryTime(), message.getId());
+                                + " where number = ? and deleted = 0",
+            message.getSendStatus().getCode(), message.getRetryTimes(), message.getNextRetryTime(), message.getNumber());
     }
 
     private static class TxMessageRowMapper implements RowMapper<TxMessagePO> {
@@ -95,6 +85,7 @@ public class TxMessageRepository {
         public TxMessagePO mapRow(ResultSet rs, int rowNum) throws SQLException {
             TxMessagePO txMessage = new TxMessagePO();
             txMessage.setContent(rs.getString("content"));
+            txMessage.setNumber(rs.getLong("number"));
             txMessage.setNextRetryTime(rs.getTimestamp("next_retry_time").toLocalDateTime());
             txMessage.setRetryTimes(rs.getInt("retry_times"));
             txMessage.setId(rs.getLong("id"));

@@ -6,6 +6,7 @@ import io.github.bty834.springtxmessage.model.SendStatus;
 import io.github.bty834.springtxmessage.model.TxMessage;
 import io.github.bty834.springtxmessage.model.TxMessagePO;
 import io.github.bty834.springtxmessage.model.TxMessageSendResult;
+import io.github.bty834.springtxmessage.utils.SnowFlake;
 import io.github.bty834.springtxmessage.utils.TransactionUtil;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -45,6 +46,7 @@ public class DefaultTxMessageSender implements TxMessageSender {
         List<TxMessagePO> txMessagePOS = messages.stream().map(
             msg -> {
                 TxMessagePO txMessagePO = TxMessagePO.convertFrom(msg);
+                txMessagePO.setNumber(SnowFlake.nextNumber());
                 txMessagePO.setSendStatus(SendStatus.INIT);
                 txMessagePO.setRetryTimes(0);
                 Integer intervalSec = propertyResolver.getProperty(COMPENSATE_INTERVAL_SECONDS, Integer.class, 10);
@@ -86,8 +88,8 @@ public class DefaultTxMessageSender implements TxMessageSender {
                 }
                 assert sendResult.getMsgId() != null;
                 msg.setMsgId(sendResult.getMsgId());
-
-                txMessageRepository.updateById(msg);
+                msg.setSendStatus(SendStatus.SUCCESS);
+                txMessageRepository.updateByNumber(msg);
             } catch (Exception e) {
                 log.error("trySend tx message failed :{}", msg, e);
                 Integer interval = propertyResolver.getProperty(COMPENSATE_INTERVAL_SECONDS, Integer.class, 10);
@@ -95,7 +97,7 @@ public class DefaultTxMessageSender implements TxMessageSender {
                 msg.setNextRetryTime(nextRetryTime);
                 msg.setSendStatus(SendStatus.FAILED);
 
-                txMessageRepository.updateById2(msg);
+                txMessageRepository.updateByNumber2(msg);
             }
         });
     }

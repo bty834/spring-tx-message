@@ -11,6 +11,7 @@ import org.springframework.lang.Nullable;
  CREATE TABLE `your_table_name` <br/>
  (<br/>
  `id`              bigint       NOT NULL AUTO_INCREMENT,<br/>
+ `number`          bigint       NOT NULL ,<br/>
  `topic`           varchar(255) NOT NULL,<br/>
  `sharding_key`    varchar(255)          DEFAULT NULL,<br/>
  `msg_id`          varchar(255)          DEFAULT NULL,<br/>
@@ -33,6 +34,7 @@ import org.springframework.lang.Nullable;
 @Data
 public class TxMessagePO {
     private Long id;
+    private Long number;
     private String topic;
     private String shardingKey;
     @Nullable

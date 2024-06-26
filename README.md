@@ -17,6 +17,7 @@
 CREATE TABLE `your_table_name`
 (
     `id`              bigint       NOT NULL AUTO_INCREMENT,
+    `number`          bigint       NOT NULL ,
     `topic`           varchar(255) NOT NULL,
     `sharding_key`    varchar(255)          DEFAULT NULL,
     `msg_id`          varchar(255)          DEFAULT NULL,

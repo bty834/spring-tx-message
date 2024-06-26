@@ -7,7 +7,7 @@ public interface TxMessageCompensateSender {
 
     void send(int maxRetryTimes);
 
-    void sendByIdIgnoreStatus(Long id);
+    void sendByNumberIgnoreStatus(Long number);
 
     void sendByMsgIdIgnoreStatus(String msgId);
 }

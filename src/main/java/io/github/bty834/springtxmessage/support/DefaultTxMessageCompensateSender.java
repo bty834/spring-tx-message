@@ -30,22 +30,22 @@ public class DefaultTxMessageCompensateSender implements TxMessageCompensateSend
         }
         Integer delaySeconds = propertyResolver.getProperty(COMPENSATE_INTERVAL_SECONDS, Integer.class, 6);
         List<TxMessagePO> txMessages = txMessageRepository.queryReadyToSendMessages(maxRetryTimes, delaySeconds);
-        List<Long> ids = txMessages.stream()
+        List<Long> numbers = txMessages.stream()
                                  .filter(msg -> msg.getRetryTimes() >= maxRetryTimes)
-                                 .map(TxMessagePO::getId)
+                                 .map(TxMessagePO::getNumber)
                                  .collect(Collectors.toList());
-        if (!ids.isEmpty()) {
-            log.error("reaches max retry times {}, ids: {}", maxRetryTimes, ids);
+        if (!numbers.isEmpty()) {
+            log.error("reaches max retry times {}, numbers: {}", maxRetryTimes, numbers);
         }
         txMessages.removeIf(msg -> msg.getRetryTimes() >= maxRetryTimes);
         doSend(txMessages);
     }
 
-    public void sendByIdIgnoreStatus(Long id) {
+    public void sendByNumberIgnoreStatus(Long number) {
         if (!propertyResolver.getProperty(COMPENSATE_ENABLED_KEY, Boolean.class, Boolean.FALSE)) {
             return;
         }
-        TxMessagePO txMessage = txMessageRepository.queryById(id);
+        TxMessagePO txMessage = txMessageRepository.queryByNumber(number);
         doSend(Collections.singletonList(txMessage));
     }
 
@@ -67,7 +67,7 @@ public class DefaultTxMessageCompensateSender implements TxMessageCompensateSend
                 assert sendResult.getMsgId() != null;
                 msg.setMsgId(sendResult.getMsgId());
                 msg.setSendStatus(SendStatus.SUCCESS);
-                txMessageRepository.updateById(msg);
+                txMessageRepository.updateByNumber(msg);
             } catch (Exception e) {
                 log.error("compensate tx message failed :{}", msg, e);
                 Integer interval = propertyResolver.getProperty(COMPENSATE_INTERVAL_SECONDS, Integer.class, 10);
@@ -75,7 +75,7 @@ public class DefaultTxMessageCompensateSender implements TxMessageCompensateSend
                 msg.setNextRetryTime(nextRetryTime);
                 msg.setRetryTimes(msg.getRetryTimes() + 1);
                 msg.setSendStatus(SendStatus.FAILED);
-                txMessageRepository.updateById2(msg);
+                txMessageRepository.updateByNumber2(msg);
             }
         });
     }

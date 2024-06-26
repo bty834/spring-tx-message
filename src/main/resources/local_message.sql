@@ -1,6 +1,7 @@
 CREATE TABLE `your_table_name`
 (
     `id`              bigint       NOT NULL AUTO_INCREMENT,
+    `number`          bigint       NOT NULL ,
     `topic`           varchar(255) NOT NULL,
     `sharding_key`    varchar(255)          DEFAULT NULL,
     `msg_id`          varchar(255)          DEFAULT NULL,
@@ -12,6 +13,7 @@ CREATE TABLE `your_table_name`
     `create_time`     datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `update_time`     datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
+    KEY `number` (`number`),
     KEY `idx_createtime` (`create_time`),
     KEY `idx_msgid` (`msg_id`),
     KEY `idx_updatetime` (`update_time`),
