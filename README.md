@@ -73,6 +73,8 @@ class MyMessageSendAdapter implements TxMessageSendAdapter {
 
 set `spring.tx.message.send.enabled = true` to enable save and try send
 
+set `spring.tx.message.send.enabled = false` to not save and sync send
+
 ```java
     @Autowired
     TxMessageSender txMessageSender;
@@ -98,7 +100,7 @@ set `spring.tx.message.compensate.send.enabled = true` to enable compensate send
         // send with retry times = 4, when reaches max retry times , it will log.error and don't compensate send
         compensateSender.send(4);
         
-        compensateSender.sendByIdIgnoreStatus(1L);
+        compensateSender.sendByNumberIgnoreStatus(1L);
         compensateSender.sendByMsgIdIgnoreStatus("xxx");
         
     }
