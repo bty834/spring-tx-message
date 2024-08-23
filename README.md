@@ -38,16 +38,26 @@ CREATE TABLE `your_table_name`
 ```
 
 ```java
+import io.github.bty834.springtxmessage.utils.SnowFlake;
+import org.springframework.context.annotation.Bean;
+
 @Configuration
 public class TxMessageConfig {
     @Bean
     public TxMessageSendAdapter txMessageSendAdapter() {
         return new MyMessageSendAdapter();
     }
+
     @Bean
     public TxMessageRepository txMessageRepository(DataSource dataSource) {
         // your_table_name is your table name 
         return new TxMessageRepository(dataSource, "your_table_name");
+    }
+
+    @Bean
+    public SnowFlake snowFlake() {
+        // pod unique
+        return new SnowFlake(1,1);
     }
 }
 
@@ -55,9 +65,9 @@ public class TxMessageConfig {
  * your send adapter
  */
 class MyMessageSendAdapter implements TxMessageSendAdapter {
-    
+
     // ...
-    
+
     @Override
     public TxMessageSendResult send(TxMessage txMessage) {
         // your adapter logic

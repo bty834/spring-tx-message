@@ -9,11 +9,6 @@ package io.github.bty834.springtxmessage.utils;
  */
 public class SnowFlake {
 
-    private static final SnowFlake snowFlake = new SnowFlake(1, 1);
-
-    public static Long nextNumber() {
-        return snowFlake.nextId();
-    }
 
     /**
      * 起始的时间戳

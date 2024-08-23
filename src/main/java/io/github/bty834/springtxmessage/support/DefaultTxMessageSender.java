@@ -29,6 +29,8 @@ public class DefaultTxMessageSender implements TxMessageSender {
 
     private final PropertyResolver propertyResolver;
 
+    private final SnowFlake snowFlake;
+
 
     @Override
     public void batchSave(List<TxMessage> messages) {
@@ -46,7 +48,7 @@ public class DefaultTxMessageSender implements TxMessageSender {
         List<TxMessagePO> txMessagePOS = messages.stream().map(
             msg -> {
                 TxMessagePO txMessagePO = TxMessagePO.convertFrom(msg);
-                txMessagePO.setNumber(SnowFlake.nextNumber());
+                txMessagePO.setNumber(snowFlake.nextId());
                 txMessagePO.setSendStatus(SendStatus.INIT);
                 txMessagePO.setRetryTimes(0);
                 Integer intervalSec = propertyResolver.getProperty(COMPENSATE_INTERVAL_SECONDS, Integer.class, 10);
